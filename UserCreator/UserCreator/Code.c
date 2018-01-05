@@ -38,7 +38,7 @@ int wmain(int argc, WCHAR **argv)
 
 	//LocalAlloc
 	UINT memAttributes = LMEM_FIXED;
-	SIZE_T sidSize = SECURITY_MAX_SID_SIZE;
+	DWORD sidSize = SECURITY_MAX_SID_SIZE;
 
 	//CreateWellKnownSid
 	WELL_KNOWN_SID_TYPE sidType = WinBuiltinUsersSid;
@@ -52,8 +52,13 @@ int wmain(int argc, WCHAR **argv)
 	SID_NAME_USE accountType;
 
 	//LookupAccountName
+	LPCWSTR machine = NULL;
 	PSID accountSID;
 	SID_NAME_USE typeOfAccount;
+	WCHAR refDomain[MAX_PATH];
+	DWORD cchRefDomain = MAX_PATH;
+
+	
 
 	//NetLocalGroupAddMembers
 	NET_API_STATUS localGroupAdd;
@@ -108,7 +113,6 @@ int wmain(int argc, WCHAR **argv)
 		//Let's allocate memory for the SID
 		if (!(groupSID = LocalAlloc(memAttributes, sidSize)))	//if fails
 		{
-			wprintf(L"\nMemory allocation failed: \n");
 			ShowError(GetLastError());
 			exit(1);
 
@@ -117,16 +121,14 @@ int wmain(int argc, WCHAR **argv)
 		//Allocate memory for LookupAccountName
 		if (!(accountSID = LocalAlloc(memAttributes, sidSize)))
 		{
-			wprintf(L"\nMemory allocation for account SID failed: \n");
 			ShowError(GetLastError());
 			exit(1);
 
 		}
 
 		//Let's create a SID for Users group
-		if (!CreateWellKnownSid(sidType, NULL, groupSID, (DWORD*)&sidSize))
+		if (!CreateWellKnownSid(sidType, NULL, groupSID, &sidSize))
 		{
-			fwprintf(stderr, L"\nError getting the SID: \n");
 			ShowError(GetLastError());
 			exit(1);
 		}
@@ -136,16 +138,17 @@ int wmain(int argc, WCHAR **argv)
 			if (!LookupAccountSidW(NULL, groupSID, name, &nameSize,
 				domainName, &domainNameSize, &accountType))
 			{
-				fwprintf(stderr, L"Error getting name from SID: \n");
 				ShowError(GetLastError());
 				return 1;
 
 			}
 
-			if (!LookupAccountNameW(NULL, argv[1], accountSID,
-									(LPDWORD)&sidSize, NULL, 0, &typeOfAccount))
+			
+
+			if (!LookupAccountNameW(machine, argv[1], accountSID,
+									&sidSize, refDomain, &cchRefDomain,
+									&typeOfAccount))
 			{
-				fwprintf(stderr, L"Error getting SID from name: \n");
 				ShowError(GetLastError());
 				return 1;
 
@@ -159,7 +162,6 @@ int wmain(int argc, WCHAR **argv)
 
 			if (localGroupAdd != NERR_Success)
 			{
-				fwprintf(stderr, L"Error adding member to the local group: \n");
 				ShowError(GetLastError());
 				return 1;
 			}
