@@ -53,11 +53,12 @@ int wmain(int argc, WCHAR **argv)
 
 	//LookupAccountName
 	LPCWSTR machine = NULL;
-	PSID accountSID;
+	BYTE accountSIDBuf[SECURITY_MAX_SID_SIZE];
+	PSID accountSID = (PSID)accountSIDBuf;
+	DWORD cbSid = 0;
 	SID_NAME_USE typeOfAccount;
-	WCHAR refDomain[MAX_PATH];
-	DWORD cchRefDomain = MAX_PATH;
-
+	/*WCHAR refDomain[MAX_NAME];*/
+	DWORD cchRefDomain = 0;
 	
 
 	//NetLocalGroupAddMembers
@@ -73,22 +74,7 @@ int wmain(int argc, WCHAR **argv)
 		fwprintf(stderr, L"\n[Privilege]: --user | --admin\n");
 		return 1;		
 
-	}
-
-	/*if ((_wcsicmp(argv[2], L"--user") == 0))
-	{
-
-	}		
-	else if ((_wcsicmp(argv[2], L"--admin") == 0))
-	{
-
-	}		
-	else
-	{
-		fwprintf(stderr, L"\nUsage: %s [UserName] [Privilege]\n", *argv);
-		fwprintf(stderr, L"\n[Privilege]: --user | --admin\n");
-		return 1;
-	}*/
+	}	
 
 	//Set up USER_INFO_1 structure
 	userData.usri1_name = argv[1];
@@ -118,14 +104,6 @@ int wmain(int argc, WCHAR **argv)
 
 		}
 
-		//Allocate memory for LookupAccountName
-		if (!(accountSID = LocalAlloc(memAttributes, sidSize)))
-		{
-			ShowError(GetLastError());
-			exit(1);
-
-		}
-
 		//Let's create a SID for Users group
 		if (!CreateWellKnownSid(sidType, NULL, groupSID, &sidSize))
 		{
@@ -141,41 +119,66 @@ int wmain(int argc, WCHAR **argv)
 				ShowError(GetLastError());
 				return 1;
 
-			}
+			}			
 
-			
-
-			if (!LookupAccountNameW(machine, argv[1], accountSID,
-									&sidSize, refDomain, &cchRefDomain,
-									&typeOfAccount))
+			if (!LookupAccountNameW(NULL, argv[1], NULL, &cbSid, NULL, &cchRefDomain, &typeOfAccount))
 			{
 				ShowError(GetLastError());
-				return 1;
+				/*exit(1);*/
+
+			}
+
+			PSID theSID;
+
+			//Love you. =)
+			LPWSTR refDomainName = (LPWSTR)malloc(cchRefDomain * sizeof(WCHAR));
+
+			if (!(theSID = LocalAlloc(memAttributes, cbSid)))
+			{
+				ShowError(GetLastError());
+				exit(1);
+			}
+
+			if (refDomainName == NULL)
+			{
+				fwprintf(stderr, L"Error allocating memory for RefDomainName \n");
+				exit(1);
+			}
+
+			//Here we go again! 
+			if (!LookupAccountNameW(NULL, argv[1], theSID, &cbSid,
+									refDomainName, &cchRefDomain, &typeOfAccount))
+			{
+				ShowError(GetLastError());
+				exit(1);
 
 			}
 
 			//Here I should be able to use NetLocalGroupAddMembers
 			//to add the user passed as argument to the Users group. 
-			localMembers.lgrmi0_sid = accountSID;
+			localMembers.lgrmi0_sid = theSID;
 
 			localGroupAdd = NetLocalGroupAddMembers(NULL, name, levelOfData, (LPBYTE)&localMembers, totalEntries);
 
 			if (localGroupAdd != NERR_Success)
 			{
-				ShowError(GetLastError());
+				ShowError(localGroupAdd);
 				return 1;
 			}
 			else
 			{
-				wprintf(L"\nUser %s has been successfully added.\n", argv[1]);
+
+				ShowError(localGroupAdd);
 
 			}
 
+			LocalFree(theSID);
+			free(refDomainName);
 
 		}
 
 		LocalFree(groupSID);
-		LocalFree(accountSID);
+		
 		
 	}
 
