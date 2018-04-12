@@ -3,6 +3,7 @@
 #include <wchar.h>
 #include <LM.h>
 #include <sddl.h>
+#include <locale.h>
 
 #pragma comment(lib, "Netapi32.lib")
 #define MAX_NAME 256
@@ -168,9 +169,31 @@ VOID ConfigUser(LPWSTR serverName, LPWSTR userName, TYPE_OF_USER typeOfUser)
 
 }
 
+VOID UserAttributes(LPWSTR serverName, LPWSTR userName)
+{
+	// NetUserSetInfoW
+	NET_API_STATUS setInfo;
+	DWORD level = 1008;
+	USER_INFO_1008 accountData;
+	DWORD paramError;
+
+	accountData.usri1008_flags = UF_SCRIPT | UF_DONT_EXPIRE_PASSWD;
+
+	setInfo = NetUserSetInfo(serverName, userName, level, (LPBYTE)&accountData, &paramError);
+
+	if (setInfo != NERR_Success)
+	{
+		ShowError(setInfo);
+		exit(1);
+	}
+
+	wprintf(L"\nAttributes set.\n");
+}
+
 
 int wmain(int argc, WCHAR **argv)
 {
+	_wsetlocale(LC_ALL, L"English");
 
 	if (argc != 4)
 	{
@@ -198,7 +221,7 @@ int wmain(int argc, WCHAR **argv)
 	userData.usri1_priv = USER_PRIV_USER;
 	userData.usri1_home_dir = NULL;
 	userData.usri1_comment = NULL;
-	userData.usri1_flags = UF_SCRIPT;
+	userData.usri1_flags = UF_SCRIPT & UF_DONT_EXPIRE_PASSWD;
 	userData.usri1_script_path = NULL;
 
 	addUser = NetUserAdd(NULL, infoLevel, (LPBYTE)&userData, &paramError);
@@ -218,6 +241,7 @@ int wmain(int argc, WCHAR **argv)
 		{
 
 			ConfigUser(serverName, argv[1], StandardUser);
+			UserAttributes(serverName, argv[1]);
 
 		}
 		else if (_wcsicmp(argv[3], L"--admin") == 0)
@@ -225,8 +249,10 @@ int wmain(int argc, WCHAR **argv)
 			/*We need to add the users to both
 			Administrators group and Users group, so
 			we call this function twice*/
+			UserAttributes(serverName, argv[1]);
 			ConfigUser(serverName, argv[1], StandardUser);
 			ConfigUser(serverName, argv[1], AdminUser);
+			
 		}
 		else
 		{
